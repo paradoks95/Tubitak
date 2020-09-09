@@ -1,4 +1,4 @@
-from numpy import loadtxt,array,arange,insert,abs,diff
+from numpy import loadtxt,array,arange,insert,abs,diff,where
 from scipy.integrate import cumtrapz
 import os
 from PreProcess import *
@@ -43,9 +43,10 @@ def process(accelerations,dt,bc_order,lowcut,highcut,filtering=False):
     pa = BaselineCorrection(accelerations,dt,bc_order)
     if filtering:
         pa = Filtering(pa,dt,"Butterworth","bandpass",lowcut,highcut)
+    
+    
     return pa
 
-    return max_accelerations/max(max_accelerations)
 
 def amplitude_reduction(free_field,trench):
     #Normalized accelerations
@@ -130,18 +131,20 @@ def channel_graph2(processed_acceleration,acceleration,dt,name):
     #fig.show()
     fig.savefig(os.path.join("Graphs","Processed Data",name))
 
-def NA_graph(accelerations,velocities,acc_distances,vel_distances):
+def NA_graph(accelerations,velocities,distances):
     path = os.path.join("Graphs","Processed","Normalized")
     path_creator(path)
     max_acc = array([max(abs(i)) for i in accelerations])
     NA = max_acc / max(max_acc)
     max_vel = array([max(abs(i)) for i in velocities])
     NV = max_vel / max(max_vel)
-    plt.plot(acc_distances,NA,label = "Acceleration")
-    plt.plot(vel_distances,NV,label = "Velocity")
+    distances = distances[:len(NA)]
+    plt.plot(distances,NA,label = "Acceleration")
+    plt.plot(distances,NV,label = "Velocity")
     plt.xlabel = "Distance(m)"
     plt.ylabel = "Normalized Values"
     plt.legend()
+    plt.semilogy()
     plt.grid()
     plt.savefig(os.path.join(path,"Normalized"),bbox_inches='tight')
     plt.close()
@@ -179,8 +182,8 @@ def acceleration_time(acceleration,velocity,dt,channel_no,process):
     path_creator(path)
     time = arange(0,len(acceleration)*dt,dt)
     acceleration2 = vel2acc(velocity,dt)
-    plt.plot(time,acceleration,label="Accelerometer")
-    plt.plot(time,acceleration2,label="Jeofon")
+    plt.plot(time,acceleration,label="Accelerometer({} g)".format(round(max(abs(acceleration)),4)),linewidth = 0.5)
+    plt.plot(time,acceleration2,label="Jeofon({} g)".format(round(max(abs(acceleration2)),4)),linewidth = 0.5)
     plt.grid()
     plt.legend()
     plt.xlabel("Time (s)")
@@ -193,8 +196,8 @@ def velocity_time(acceleration,velocity,dt,channel_no,process):
     path_creator(path)
     time = arange(0,len(velocity)*dt,dt)
     velocity2,_ = time_series(acceleration,dt)
-    plt.plot(time,velocity,label="Jeofon")
-    plt.plot(time,velocity2,label="Accelerometer")
+    plt.plot(time,velocity,label="Jeofon({} m/s)".format(round(max(abs(velocity)),4)),linewidth=0.5)
+    plt.plot(time,velocity2,label="Accelerometer({} m/s)".format(round(max(abs(velocity2)),4)),linewidth=0.5)
     plt.grid()
     plt.legend()
     plt.xlabel("Time (s)")
@@ -202,65 +205,23 @@ def velocity_time(acceleration,velocity,dt,channel_no,process):
     plt.savefig(os.path.join(path,"VelocityVsTime"),bbox_inches='tight')
     plt.close()
 
-def fourierSpectrum(acceleration,velocity,dt,channel_no,process):
+def fourierSpectrum(acceleration,velocity,dt,channel_no,process,startFrom=10,endAt=100):
     path = os.path.join("Graphs",process,"Channel {}".format(channel_no))
     path_creator(path)
     vel,_ = time_series(acceleration,dt)
     f,fa,_ = FourierAmplitude(velocity,dt)
     f2,fa2,_ = FourierAmplitude(vel,dt)
-    plt.plot(f,fa,label="Jeofon")
-    plt.plot(f2,fa2,label="Accelerometer")
+    first_index =(abs(f-startFrom)).argmin()
+    last_index =(abs(f-endAt)).argmin()
+    plt.plot(f[first_index:last_index],fa[first_index:last_index],label="Jeofon({})".format(round(max(abs(fa[first_index:])),4)))
+    plt.plot(f2[first_index:last_index],fa2[first_index:last_index],label="Accelerometer({})".format(round(max(abs(fa2[first_index:])),4)))
     plt.grid()
     plt.legend()
-    plt.semilogx()
+    plt.xticks(arange(startFrom,endAt+10,10))
+    #plt.semilogx()
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Fourier Amplitude")
     plt.savefig(os.path.join(path,"FourierSpectrum"),bbox_inches='tight')
     plt.close()
 
 
-"""
-f1 = lambda x:(x-0.89)*10
-f2 = lambda x:100*x/60
-#f2 = lambda x:(x-0.89)*2.5
-
-acc_file = "tam_gömülü.txt"
-vel_file = "tam_gömülü.txt"
-modify_file(acc_file)
-modify_file(vel_file)
-
-acceleration_channels = [2]
-velocity_channels = [0]
-acc = read_file(acc_file,acceleration_channels,f1)
-vel = read_file(vel_file,velocity_channels,f2)
-
-dt = 0.005
-times = arange(0,len(acc[0])*dt,dt)
-
-pro_acc = process(times,acc,dt,4,15,25,True)
-v,d = time_series(pro_acc[0],dt)
-pro_vel = process(times,vel,dt,4,15,25,True)
-
-#acc2vel,d = time_series(pro_acc[],dt)
-#vel_acc = vel2acc(pro_vel,times)
-
-f,fa,pa = FourierAmplitude(v,dt)
-f2,fa2,pa2 = FourierAmplitude(pro_vel[0],dt)
-plt.plot(f,fa,label="C3",linewidth=0.5)
-plt.plot(f2,fa2,label="C1",linewidth=0.5)
-plt.legend()
-plt.semilogx()
-plt.show()
-plt.close()
-
-for i in range(len(acc)):
-    name = "Kanal{}".format(i+1)
-    channel_graph(pro_acc[i], acc[i], dt,name)
-
-distances = [1,4,7,10,13,16,19,22]
-#NA_graph(pro_acc,distances)
-velocity_graph(pro_acc,pro_vel,dt)
-
-#1)Jeofon
-#2)İvme (2- (-2))
-#3)Mini ivme ölçer (0.5-1.3)"""

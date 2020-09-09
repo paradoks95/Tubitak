@@ -13,6 +13,7 @@ def Filtering(data,dt,filter_type,filter_configuration,lowcut,highcut = 0,order=
     nyq = 0.5 / dt
     low = lowcut / nyq
     high = highcut / nyq
+    print(dt,nyq,low,high)
     if filter_configuration == "bandpass" or filter_configuration=="bandstop":
         cutoff = [low,high]
     else:

@@ -71,19 +71,3 @@ def ResponseSpectra(acceleration, dt, periods, damping=0.05):
     response_spectrum['Pseudo-Acceleration'] = (omega ** 2.) * response_spectrum['Displacement']/981
 
     return response_spectrum
-
-from pandas import read_excel
-import matplotlib.pyplot as plt
-
-excel = read_excel("FFT.xlsx")
-time = excel.iloc[:,0].values
-acc = excel.iloc[:,1].values
-
-f,fa,pa = FourierAmplitude(acc,0.005)
-
-plt.plot(f,fa)
-plt.semilogx()
-plt.ylabel("Fourier Amplitude")
-plt.xlabel("Frequency")
-plt.grid()
-plt.show()
