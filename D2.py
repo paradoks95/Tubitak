@@ -40,6 +40,10 @@ class Create_Model:
         self.ditchnumber = temp_ditchnumber
         self.ditch2ditch = temp_ditch2ditch
 
+        self.fillDitch = int(temp_fill_ditch)
+        self.RC_E = temp_RC_E
+        self.RC_density = temp_RC_density
+
         self.SP_pattern = array(temp_SP_pattern)+self.source_size
         self.SP_E = temp_SP_E
         self.SP_density = temp_SP_density
@@ -100,35 +104,109 @@ class Create_Model:
         del self.soilModel.sketches['__profile__']
 
     def create_sheet_pile(self):
-        self.soilMaterial = self.soilModel.Material("Steel")
-        self.soilMaterial.Density(table=((self.SP_density,),))
-        self.soilMaterial.Elastic(table=((self.SP_E,0.33),))
-        self.soilModel.HomogeneousSolidSection(name="Sheet Pile Section", material="Steel")
+        if len(self.SP_pattern) > 0:
+            self.soilMaterial = self.soilModel.Material("Steel")
+            self.soilMaterial.Density(table=((self.SP_density,),))
+            self.soilMaterial.Elastic(table=((self.SP_E,0.33),))
+            self.soilModel.HomogeneousSolidSection(name="Sheet Pile Section", material="Steel")
 
-        for i in range(len(self.SP_pattern)):
-            #Draw Sheet Pile
-            face = self.soilPart.faces.findAt((self.Width - self.inf_size_x - 0.01,self.Height-0.01,0))
-            self.soilModel.ConstrainedSketch(gridSpacing=3.53, name='__profile__', sheetSize=self.Width,
-                                             transform=self.soilPart.MakeSketchTransform(sketchPlane=face,
-                                                                                         sketchPlaneSide=SIDE1,
-                                                                                         sketchOrientation=RIGHT,
-                                                                                         origin=(0, 0, 0.0)))
+            try:
+                for x in self.SP_pattern:
+                    face = self.soilPart.faces.findAt((0.01, self.Height - self.SP_height, 0))
+                    self.soilModel.ConstrainedSketch(gridSpacing=3.53, name='__profile__', sheetSize=self.Width,
+                                                        transform=self.soilPart.MakeSketchTransform(sketchPlane=face,
+                                                                                                    sketchPlaneSide=SIDE1,
+                                                                                                    sketchOrientation=RIGHT,
+                                                                                                    origin=(0, 0, 0.0)))
+                    self.soilPart.projectReferencesOntoSketch(filter=COPLANAR_EDGES,
+                                                                sketch=self.soilModel.sketches['__profile__'])
+                    self.soilModel.sketches['__profile__'].Line(point1=(0, self.Height - self.SP_height),
+                                                                point2=(self.Width, self.Height - self.SP_height))
+                    self.soilPart.PartitionFaceBySketch(faces=face, sketch=self.soilModel.sketches['__profile__'])
+                    del self.soilModel.sketches['__profile__']
+            except:
+                pass
 
-            self.soilPart.projectReferencesOntoSketch(filter=COPLANAR_EDGES,
-                                                      sketch=self.soilModel.sketches['__profile__'])
-            self.soilModel.sketches['__profile__'].rectangle(point1=(self.SP_pattern[i], self.Height),
-                                                             point2=(self.SP_pattern[i]+self.SP_thickness, self.Height - self.SP_height))
-            self.soilPart.PartitionFaceBySketch(faces=face,
-                                                sketch=self.soilModel.sketches['__profile__'])
-            del self.soilModel.sketches['__profile__']
+            for y in list(self.layer_heights[:-1])+[self.Height - self.SP_height]:
+                for i in range(len(self.SP_pattern)):
+                    #Draw Sheet Pile
+                    face = self.soilPart.faces.findAt((self.Width - self.inf_size_x - 0.01,y-0.01,0))
+                    self.soilModel.ConstrainedSketch(gridSpacing=3.53, name='__profile__', sheetSize=self.Width,
+                                                    transform=self.soilPart.MakeSketchTransform(sketchPlane=face,
+                                                                                                sketchPlaneSide=SIDE1,
+                                                                                                sketchOrientation=RIGHT,
+                                                                                                origin=(0, 0, 0.0)))
 
+                    self.soilPart.projectReferencesOntoSketch(filter=COPLANAR_EDGES,
+                                                            sketch=self.soilModel.sketches['__profile__'])
+                    self.soilModel.sketches['__profile__'].rectangle(point1=(self.SP_pattern[i], y),
+                                                                    point2=(self.SP_pattern[i]+self.SP_thickness, 0))
+                    self.soilPart.PartitionFaceBySketch(faces=face,sketch=self.soilModel.sketches['__profile__'])
+                    del self.soilModel.sketches['__profile__']
+    
             #Section Assignment
-            face = self.soilPart.faces.findAt((self.SP_pattern[i]+self.SP_thickness/2,self.Height-0.01,0))
+            for y in self.layer_heights:
+                for i in range(len(self.SP_pattern)):               
+                    if y >= self.Height - self.SP_height:
+                        face = self.soilPart.faces.findAt((self.SP_pattern[i]+self.SP_thickness/2,y-0.01,0))
+                        self.soilPart.SectionAssignment(region=(face,),sectionName="Sheet Pile Section")
+            face = self.soilPart.faces.findAt((self.SP_pattern[i]+self.SP_thickness/2,self.Height - self.SP_height + 0.01,0))
             self.soilPart.SectionAssignment(region=(face,),sectionName="Sheet Pile Section")
 
+    def create_rubber_barrier(self):
+        if self.fillDitch and self.ditchnumber:
+            
+            self.soilMaterial = self.soilModel.Material("Rubber")
+            self.soilMaterial.Density(table=((self.RC_density,),))
+            self.soilMaterial.Elastic(table=((self.RC_E,0.33),))
+            self.soilModel.HomogeneousSolidSection(name="Rubber Chip Section", material="Rubber")
 
+            try:
+                for i in range(self.ditchnumber):
+                    face = self.soilPart.faces.findAt((0.01, self.Height - self.ditch_depth, 0))
+                    self.soilModel.ConstrainedSketch(gridSpacing=3.53, name='__profile__', sheetSize=self.Width,
+                                                        transform=self.soilPart.MakeSketchTransform(sketchPlane=face,
+                                                                                                    sketchPlaneSide=SIDE1,
+                                                                                                    sketchOrientation=RIGHT,
+                                                                                                    origin=(0, 0, 0.0)))
+                    self.soilPart.projectReferencesOntoSketch(filter=COPLANAR_EDGES,
+                                                                sketch=self.soilModel.sketches['__profile__'])
+                    self.soilModel.sketches['__profile__'].Line(point1=(0, self.Height - self.ditch_depth),
+                                                                point2=(self.Width, self.Height - self.ditch_depth))
+                    self.soilPart.PartitionFaceBySketch(faces=face, sketch=self.soilModel.sketches['__profile__'])
+                    del self.soilModel.sketches['__profile__']
+            except:
+                pass
+
+            for y in list(self.layer_heights[:-1])+[self.Height - self.ditch_depth]:
+                for i in range(self.ditchnumber):
+                    x = self.source_size + self.ditch2source + i*(self.ditch_width + self.ditch2ditch)
+                    face = self.soilPart.faces.findAt((x -  0.01,y-0.01,0))
+                    self.soilModel.ConstrainedSketch(gridSpacing=3.53, name='__profile__', sheetSize=self.Width,
+                                                    transform=self.soilPart.MakeSketchTransform(sketchPlane=face,
+                                                                                                sketchPlaneSide=SIDE1,
+                                                                                                sketchOrientation=RIGHT,
+                                                                                                origin=(0, 0, 0.0)))
+
+                    self.soilPart.projectReferencesOntoSketch(filter=COPLANAR_EDGES,
+                                                            sketch=self.soilModel.sketches['__profile__'])
+                    self.soilModel.sketches['__profile__'].rectangle(point1=(x, y),
+                                                                    point2=(x+self.ditch_width, 0))
+                    self.soilPart.PartitionFaceBySketch(faces=face,sketch=self.soilModel.sketches['__profile__'])
+                    del self.soilModel.sketches['__profile__']
+    
+            #Section Assignment
+            for y in self.layer_heights:
+                for i in range(self.ditchnumber):
+                    x = self.source_size + self.ditch2source + i*(self.ditch_width + self.ditch2ditch)             
+                    if y >= self.Height - self.ditch_depth:
+                        face = self.soilPart.faces.findAt((x+self.ditch_width/2,y-0.01,0))
+                        self.soilPart.SectionAssignment(region=(face,),sectionName="Rubber Chip Section")
+            face = self.soilPart.faces.findAt((x+self.ditch_width/2,self.Height - self.ditch_depth + 0.01,0))
+            self.soilPart.SectionAssignment(region=(face,),sectionName="Rubber Chip Section")
+               
     def create_ditch(self):
-        if self.ditchnumber > 0:
+        if self.ditchnumber > 0 and not self.fillDitch:
             top_face = self.soilPart.faces.findAt((0.01, self.Height - 0.01, 0))
             for i in range(self.ditchnumber):
                 x = self.source_size + self.ditch2source + i*(self.ditch_width + self.ditch2ditch)
@@ -141,6 +219,7 @@ class Create_Model:
                 self.soilPart.projectReferencesOntoSketch(filter=COPLANAR_EDGES,sketch=self.soilModel.sketches['__profile__'])
                 self.soilModel.sketches['__profile__'].rectangle(point1=(x, self.Height),
                                                             point2=(x + self.ditch_width, self.Height - self.ditch_depth))
+                
                 self.soilPart.Cut(sketch=self.soilModel.sketches['__profile__'])
                 del self.soilModel.sketches['__profile__']
 
@@ -195,7 +274,6 @@ class Create_Model:
         self.soilMaterial.Damping(alpha=alpha, beta=beta)
 
     def create_section(self):
-
         bottom_face = self.soilPart.faces[self.soilPart.faces.findAt((0.01, 0.01, 0)).index]
         bottom_right_face = self.soilPart.faces[self.soilPart.faces.findAt((self.Width - 0.01, 0, 0)).index]
         right_bottom_face = self.soilPart.faces[self.soilPart.faces.findAt((self.Width - 0.01, self.inf_size_y - 0.01, 0)).index]
@@ -222,23 +300,6 @@ class Create_Model:
                 self.soilPart.SectionAssignment(region=(self.soilPart.faces[index], ),sectionName=section_name)
                 index_list.append(index)
             self.soilPart.Set(faces=self.f(self.soilPart.faces, index_list), name=name + "_Face")
-
-        if len(self.SP_pattern)>0:
-            try:
-                face = self.soilPart.faces.findAt((0.01, self.Height - self.SP_height, 0))
-                self.soilModel.ConstrainedSketch(gridSpacing=3.53, name='__profile__', sheetSize=self.Width,
-                                                 transform=self.soilPart.MakeSketchTransform(sketchPlane=face,
-                                                                                             sketchPlaneSide=SIDE1,
-                                                                                             sketchOrientation=RIGHT,
-                                                                                             origin=(0, 0, 0.0)))
-                self.soilPart.projectReferencesOntoSketch(filter=COPLANAR_EDGES,
-                                                          sketch=self.soilModel.sketches['__profile__'])
-                self.soilModel.sketches['__profile__'].Line(point1=(0, self.Height - self.SP_height),
-                                                            point2=(self.Width, self.Height - self.SP_height))
-                self.soilPart.PartitionFaceBySketch(faces=face, sketch=self.soilModel.sketches['__profile__'])
-                del self.soilModel.sketches['__profile__']
-            except:
-                pass
 
     def create_face_sets(self):
         finite_faces = self.soilPart.faces.getByBoundingBox(0, self.inf_size_y, 0, self.Width - self.inf_size_x,
@@ -284,7 +345,6 @@ class Create_Model:
             N2 = (self.Width - self.inf_size_x, y, 0)
             N3 = (self.Width, y, 0)
             try:
-                print(N1)
                 id1 = self.soilPart.edges.findAt(N1).index
                 id2 = self.soilPart.edges.findAt(N2).index
                 id3 = self.soilPart.edges.findAt(N3).index
@@ -384,7 +444,6 @@ class Create_Model:
             edge = self.soilPart.edges.findAt((self.Width-0.01,y,0))
             self.soilPart.setSweepPath(edge=edge, region=face, sense=FORWARD)
 
-
     def create_mesh(self):
         self.set_mesh_control()
         self.soilPart.setElementType(regions=(self.soilPart.sets["Infinite_Faces"]),elemTypes=(
@@ -435,8 +494,7 @@ class Create_Model:
 
     def operator(self):
         self.create_part()
-        self.create_sheet_pile()
-
+        
         for i in range(len(self.parameter["Name"])):
             name = self.parameter["Name"][i]
             height = sum(self.parameter["Thicknesses"][:i + 1])
@@ -456,6 +514,8 @@ class Create_Model:
         self.create_instance()
         self.create_step()
         self.create_face_sets()
+        self.create_sheet_pile()
+        self.create_rubber_barrier()
         self.create_ditch()
         self.create_mesh()
         self.create_nodes()

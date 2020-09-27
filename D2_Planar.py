@@ -39,6 +39,10 @@ class Create_Model:
         self.ditchnumber = temp_ditchnumber
         self.ditch2ditch = temp_ditch2ditch
 
+        self.fillDitch = int(temp_fill_ditch)
+        self.RC_E = temp_RC_E
+        self.RC_density = temp_RC_density
+
         self.SP_pattern = array(temp_SP_pattern)+self.Width/2 + self.source_size/2
         self.SP_E = temp_SP_E
         self.SP_density = temp_SP_density
@@ -199,6 +203,54 @@ class Create_Model:
             except:
                 pass
 
+    def create_rubber_barrier(self):
+        if self.fillDitch and self.ditchnumber:   
+            self.soilMaterial = self.soilModel.Material("Rubber")
+            self.soilMaterial.Density(table=((self.RC_density,),))
+            self.soilMaterial.Elastic(table=((self.RC_E,0.33),))
+            self.soilModel.HomogeneousSolidSection(name="Rubber Chips Section", material="Rubber")
+
+            for i in range(self.ditchnumber):
+                x = self.Width/2 +self.source_size/2 + self.ditch2source + i*(self.ditch_width + self.ditch2ditch)
+                print(x)
+                #Draw Rubber Chip
+                RCProfileSketch = self.soilModel.ConstrainedSketch(name="__profile__", sheetSize=self.Width * 2)
+                RCProfileSketch.rectangle(point1=(0, 0), point2=(self.ditch_width, self.ditch_depth))
+                RCPart = self.soilModel.Part(name="Rubber Chips_{}".format(i+1), dimensionality=TWO_D_PLANAR, type=DEFORMABLE_BODY)
+                RCPart.BaseShell(sketch=RCProfileSketch)
+                RCPart.Set(faces=self.f(RCPart.faces, [0]), name="Rubber Chips_{}".format(i+1))
+                RCPart.SectionAssignment(region=(RCPart.faces,),sectionName="Rubber Chips Section")
+                del self.soilModel.sketches['__profile__']
+
+                #Create Soil Surface
+                edge1 = self.soilPart.edges.findAt((x,self.Height-0.01,0)).index
+                edge2 = self.soilPart.edges.findAt((x+self.ditch_width,self.Height-0.01,0)).index
+                edge3 = self.soilPart.edges.findAt((x+self.ditch_width/2,self.Height-self.ditch_depth,0)).index
+                self.soilPart.Surface(name='Trench Surface_{}'.format(i+1),side1Edges=self.f(self.soilPart.edges,[edge1,edge2,edge3]))
+
+                #Create Instance
+                self.create_instance("Rubber Chips-{}".format(i+1),RCPart)
+
+                # Translate Pile
+                self.soilModel.rootAssembly.translate(instanceList=('Rubber Chips-{}'.format(i + 1),),
+                                                    vector=(x, self.Height - self.ditch_depth, 0.0))
+                # Create Rubber Chips Surface
+                edge1 = RCPart.edges.findAt((0, self.ditch_depth/2, 0)).index
+                edge2 = RCPart.edges.findAt((x, self.ditch_depth/2, 0)).index
+                edge3 = RCPart.edges.findAt((x / 2, 0, 0)).index
+                RCPart.Surface(name='RC Surface_{}'.format(i + 1), side1Edges=self.f(SPPart.edges, [edge1, edge2, edge3]))
+
+                #Interaction
+                self.soilModel.ContactProperty('IntProp-2')
+                self.soilModel.interactionProperties['IntProp-2'].TangentialBehavior(formulation=ROUGH)
+                self.soilModel.SurfaceToSurfaceContactStd(adjustMethod=NONE,
+                    clearanceRegion=None, createStepName='Initial', datumAxis=None,
+                    initialClearance=OMIT, interactionProperty='IntProp-2', master=
+                    self.soilModel.rootAssembly.instances['Soil Part-1'].surfaces['Trench Surface_{}'.format(i+1)], name='Int-1',
+                     slave=self.soilModel.rootAssembly.instances['Rubber Chips-{}'.format(i+1)].surfaces['RC Surface_{}'.format(i+1)]
+                    , sliding=FINITE, thickness=ON)
+            
+    
     def sketch_face(self, y, left_x):
         face = self.soilPart.faces.findAt((0.01 + left_x, y - 0.01, 0))
         self.soilModel.ConstrainedSketch(gridSpacing=3.53, name='__profile__', sheetSize=self.Width,
@@ -430,6 +482,7 @@ class Create_Model:
                                                                                      origin=(0, 0, 0.0)))
 
         self.soilPart.projectReferencesOntoSketch(filter=COPLANAR_EDGES, sketch=self.soilModel.sketches[name])
+    
     def divide_model(self):
         for y in list(self.layer_heights) + [self.Height - self.SP_height,self.Height - self.ditch_depth]:
             face = self.soilPart.faces.findAt((self.Width/2,y-0.1,0))
@@ -455,7 +508,6 @@ class Create_Model:
                     self.soilModel.sketches['__profile2__'].Line(point1=(x2, y), point2=(x2, 0))
                     self.soilPart.PartitionFaceBySketch(faces=face2, sketch=self.soilModel.sketches['__profile2__'])
                 del self.soilModel.sketches['__profile2__']
-
 
     def set_mesh_control(self):
         face1 = self.soilPart.faces.findAt((self.Width - 1, 0.01,0))
@@ -493,7 +545,7 @@ class Create_Model:
             self.soilPart.setSweepPath(edge=edge4, region=face4, sense=FORWARD)
 
     def create_mesh(self):
-        #self.set_mesh_control()
+        self.set_mesh_control()
         self.soilPart.setElementType(regions=(self.soilPart.sets["Infinite_Faces"]),elemTypes=(
         mesh.ElemType(elemCode=CPE4I, elemLibrary=STANDARD), mesh.ElemType(elemCode=CPE4I, elemLibrary=STANDARD)))
         self.soilPart.setElementType(regions=(self.soilPart.sets["Finite_Faces"]), elemTypes=(
@@ -501,7 +553,7 @@ class Create_Model:
         self.soilPart.seedEdgeBySize(edges=self.soilPart.sets["All_Vertical_Edges"].edges, size=self.mesh_size,
                                      constraint=FIXED)
         self.soilPart.seedEdgeBySize(edges=self.soilPart.sets["Finite_Horizontal_Edges"].edges, size=self.mesh_size,
-                                     constraint=FIXED)
+                                     )
         self.soilPart.seedEdgeBySize(edges=(self.soilPart.edges.findAt((0.01, 0, 0)),), size=self.mesh_size)
         self.soilPart.seedEdgeByNumber(edges=self.soilPart.sets["Single_Seed_Edges"].edges, number=1,
                                        constraint=FIXED)
@@ -574,13 +626,14 @@ class Create_Model:
         self.create_step()
         self.create_face_sets()
         self.create_ditch()
+        #self.create_rubber_barrier()
         self.divide_model()
         self.create_mesh()
         self.create_nodes()
         self.create_boundary_conditions()
         self.create_history_output()
         self.create_job()
-        #self.change_element_type()
+        self.change_element_type()
 
 model = Create_Model()
 model.operator()
