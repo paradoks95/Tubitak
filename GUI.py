@@ -4,6 +4,8 @@ from PyQt5.QtGui import QIcon,QPixmap
 from PyQt5.QtCore import pyqtSlot,Qt
 from Graphs import *
 from PreProcess import *
+from numpy import loadtxt
+import os
 
 class App(QMainWindow):
     def __init__(self):
@@ -77,11 +79,11 @@ class MyTableWidget(QWidget):
         options |= QFileDialog.DontUseNativeDialog
         fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","All Files (*);;Python Files (*.py)", options=options)
         if fileName:
-            modify_file(fileName)
+            #modify_file(fileName)
             records = loadtxt(fileName,skiprows=8,unpack=True)
             self.records["Acceleration"]=records
             self.records["Velocity"]=records
-            self.dt = read_dt(fileName)
+            self.dt = 0.0005
             self.channelTable(len(records),"Acceleration")
             self.channelTable(len(records),"Velocity")
     

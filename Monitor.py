@@ -5,11 +5,12 @@ from threading import Thread
 from datetime import datetime
 from shutil import move
 import sys
-from numpy import float
+from numpy import float,arange
+from numpy.core.records import array
 from pandas import read_excel
 
 class Monitor:
-    def __init__(self,dimension):
+    def __init__(self,dimension,frequency,model_name,damping,pattern):
         soil_excel = read_excel("SoilProfile.xlsx",sheet_name="SoilParameters",header=None)
         model_parameters = read_excel("SoilProfile.xlsx",sheet_name="ModelParameters",header=None).iloc[:,1].values
         sheet_pile_parameters = read_excel("SoilProfile.xlsx",sheet_name="SheetPileParameters",header=None).iloc[:,1].values
@@ -17,15 +18,14 @@ class Monitor:
         self.initial_path = os.getcwd()
         self.Dimension = dimension
 
-        self.damping_ratio = str(soil_excel.iloc[0,1])
+        #self.damping_ratio = str(soil_excel.iloc[0,1])
+        self.damping_ratio = damping
         self.layer_names = str(soil_excel.loc[2:,0].values).replace(" ",",")
         self.elastic_modulus = str(soil_excel.loc[2:,1].values).replace(" ",",")
         self.poisson_ratio = str(soil_excel.loc[2:,2].values).replace(" ",",")
         self.density = str(soil_excel.loc[2:,3].values).replace(" ",",")
-        self.permeability = str(soil_excel.loc[2:,4].values).replace(" ",",")
-        self.void_ratio = str(soil_excel.loc[2:,5].values).replace(" ",",")
-        self.thickness = str(soil_excel.loc[2:,6].values).replace(" ",",")
-        self.VS = str(soil_excel.loc[2:,7].values).replace(" ",",")
+        self.thickness = str(soil_excel.loc[2:,4].values).replace(" ",",")
+        self.VS = str(soil_excel.loc[2:,5].values).replace(" ",",")
 
         self.W = str(model_parameters[1])
         self.L = str(model_parameters[2])
@@ -35,14 +35,17 @@ class Monitor:
         self.DH = model_parameters[6]
         self.D2S = model_parameters[7]
         self.D2D = model_parameters[8]
-        self.accelometer_pattern = str(model_parameters[9])
+        #self.accelometer_pattern = str(model_parameters[9])
+        self.accelometer_pattern = str(pattern)
         self.source_size = model_parameters[10]
         self.PGA = model_parameters[11]
-        self.frequency = model_parameters[12]
+        #self.frequency = model_parameters[12]
+        self.frequency = frequency
         self.time_step = model_parameters[13]
         self.duration = model_parameters[14]
         self.mesh_size = model_parameters[17]
-        self.model_name = model_parameters[0]
+        #self.model_name = model_parameters[0]
+        self.model_name = model_name
 
         self.SP_pattern = str(sheet_pile_parameters[0])
         self.SP_E = str(sheet_pile_parameters[1])
@@ -79,8 +82,6 @@ class Monitor:
             data = data.replace("temp_elastic",str(self.elastic_modulus))
             data = data.replace("temp_poisson",str(self.poisson_ratio))
             data = data.replace("temp_density",str(self.density))
-            data = data.replace("temp_permeability",str(self.permeability))
-            data = data.replace("temp_void_ratio",str(self.void_ratio))
             data = data.replace("temp_thickness",str(self.thickness))
             data = data.replace("temp_damping_ratio",str(self.damping_ratio))
             data = data.replace("temp_VS",str(self.VS))
@@ -88,12 +89,13 @@ class Monitor:
             data = data.replace("temp_width",str(self.W))
             data = data.replace("temp_height",str(self.L))
 
-            data = data.replace("temp_ditch_width",str(self.DW))
-            data = data.replace("temp_ditch_length",str(self.DL))
-            data = data.replace("temp_ditch2ditch",str(self.D2D))
-            data = data.replace("temp_ditch2source",str(self.D2S))
-            data = data.replace("temp_ditch_height",str(self.DH))
-            data = data.replace("temp_ditch_number",str(self.ditch_number))
+            data = data.replace("temp_ditch_width", str(self.DW))
+            data = data.replace("temp_ditch2ditch", str(self.D2D))
+            data = data.replace("temp_ditch2source", str(self.D2S))
+            data = data.replace("temp_ditch_depth", str(self.DH))
+            data = data.replace("temp_ditchnumber", str(self.ditch_number))
+            data = data.replace("temp_ditch_length", str(self.DL))
+
 
             data = data.replace("temp_fill_ditch",str(self.ditch_number))
             data = data.replace("temp_RC_E",str(self.RC_E))
@@ -108,7 +110,7 @@ class Monitor:
             data = data.replace("temp_mesh_size",str(self.mesh_size))
             file_old.close()
         else:
-            old_path = os.path.join(self.initial_path, "D2_Planar.py")
+            old_path = os.path.join(self.initial_path, "D2.py")
             new_path = os.path.join(self.target_path, "D2_Infinite.py")
             file_old = open(old_path)
             data = file_old.read().replace("temp_model_name", str(self.model_name))
@@ -116,8 +118,6 @@ class Monitor:
             data = data.replace("temp_elastic", str(self.elastic_modulus))
             data = data.replace("temp_poisson", str(self.poisson_ratio))
             data = data.replace("temp_density", str(self.density))
-            data = data.replace("temp_permeability", str(self.permeability))
-            data = data.replace("temp_void_ratio", str(self.void_ratio))
             data = data.replace("temp_thickness", str(self.thickness))
             data = data.replace("temp_damping_ratio", str(self.damping_ratio))
             data = data.replace("temp_VS", str(self.VS))
@@ -202,8 +202,12 @@ class Monitor:
         for i in os.listdir():
             ex = i.split(".")[-1]
             if ex=="odb":
+                if i in os.listdir("ODB"):
+                    os.remove("ODB\\{}".format(i))
                 move(i,"ODB")
             elif ex=="txt":
+                if i in os.listdir("Output\\{}".format(self.model_name)):
+                    os.remove("Output\\{}\\{}".format(self.model_name,i))
                 move(i,os.path.join("Output",self.model_name))
             else:
                 try:
@@ -239,9 +243,16 @@ class Monitor:
         reading.join()
         job.join()
 
-
-model = Monitor("2D")
-model.path_creater()
-model.modify_model()
-#model.operator()
-#model.output()
+frequencies = arange(10,160,10)
+dampings = [0.03,0.05,0.07]
+pattern = list(arange(1,21.5,0.5))
+frequencies = [30]
+dampings = [0.05]
+for f in frequencies:
+    for d in dampings:
+        model_name = "Milas_A_{}Hz_Serim2_2D".format(f,int(100*d))
+        model = Monitor("2D",f,model_name,d,pattern)
+        model.path_creater()
+        model.modify_model()
+        #model.operator()
+        #model.output()

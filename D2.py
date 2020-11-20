@@ -8,7 +8,7 @@ import part
 import section
 import mesh
 from odbAccess import *
-from numpy import float,cumsum,array,abs,where,cos,arange,pi,zeros,unique,append
+from numpy import float,cumsum,array,abs,where,sin,arange,pi,zeros,unique,append
 
 class Create_Model:
     def __init__(self):
@@ -16,8 +16,6 @@ class Create_Model:
                           "Elastic": temp_elastic,
                           "Poisson": temp_poisson,
                           "Density": temp_density,
-                          "Permeability": temp_permeability,
-                          "Void": temp_void_ratio,
                           "Thicknesses": temp_thickness,
                           "Damping Ratio": temp_damping_ratio,
                           "Vs": temp_VS}
@@ -26,7 +24,6 @@ class Create_Model:
         self.inf_size_y = 10
         self.Width = float(temp_width)+self.inf_size_x
         self.Height = float(sum(self.parameter["Thicknesses"]))+self.inf_size_y
-        self.gwt = self.Height
         self.source_size = float(temp_source_size)/2
         self.accelometer_pattern = temp_accelerometer_pattern
         self.PGA = temp_PGA
@@ -393,7 +390,7 @@ class Create_Model:
 
     def create_vibration(self):
         time = arange(0, self.duration + self.time_step, self.time_step)
-        accelerations = self.PGA * cos(2 * pi * self.frequency * time)
+        accelerations = self.PGA * sin(2 * pi * self.frequency * time)
         self.data = [[time[i], accelerations[i]] for i in range(len(time))]
 
     def create_step(self):
@@ -407,29 +404,13 @@ class Create_Model:
     def create_boundary_conditions(self):
         Sets = self.soilModel.rootAssembly.instances["Soil Part-1"].sets
         self.soilModel.XsymmBC(createStepName='Initial', name='BC-X-Left', region=Sets['Left_Vertical_Edges'])
-        #self.soilModel.DisplacementBC(amplitude="Vibration", createStepName='Vibration Step', name='Vibration',region=Sets['Source'], u2=-0.01)
+        self.soilModel.DisplacementBC(amplitude="Vibration", createStepName='Vibration Step', name='Vibration',region=Sets['Source'], u2=-0.001)
 
         #source_edge = self.soilPart.edges.findAt((self.source_size / 2, self.Height, 0)).index
         #self.soilPart.Surface(name="Source_Top", side1Edges=self.f(self.soilPart.edges, [source_edge, ]))
         #self.soilModel.Pressure(amplitude='Vibration', createStepName='Vibration Step', magnitude=1,name='Vibration',
         #                        region=self.soilModel.rootAssembly.instances['Soil Part-1'].surfaces['Source_Top'])
-        self.soilModel.AccelerationBC(a2=-0.01, amplitude='Vibration',createStepName='Vibration Step', fieldName='',name='BC-2',region=Sets["Source"])
-
-    def bisection(self, Vs, u):
-        x1 = float(Vs / 2)
-        x2 = float(Vs)
-        c = float((x1 + x2) / 2)
-        a = float(((1 - 2 * u) / (2 - 2 * u)) ** 0.5)
-        f = lambda VR: (VR / Vs) ** 6 - 8 * (VR / Vs) ** 4 - (16 * a ** 2 - 24) * (VR / Vs) ** 2 - 16 * (1 - a ** 2)
-
-        while abs(f(c)) > 0.01:
-            if f(c) > 0:
-                x2 = c
-            else:
-                x1 = c
-            c = (x1 + x2) / 2
-
-        return c
+        #self.soilModel.AccelerationBC(a2=-0.01, amplitude='Vibration',createStepName='Vibration Step', fieldName='',name='BC-2',region=Sets["Source"])
 
     def set_mesh_control(self):
         face1 = self.soilPart.faces.findAt((self.Width - 1, 0.01,0))
@@ -461,7 +442,7 @@ class Create_Model:
 
     def create_nodes(self):
         self.node_list = []
-        x2 = self.source_size + cumsum(array(self.accelometer_pattern))
+        x2 = self.source_size + array(self.accelometer_pattern)
         for i in x2:
             self.node_list.append(self.soilPart.nodes.getClosest((i, self.Height, 0)))
             self.node_list.append(self.soilPart.nodes.getClosest((i, self.Height, 0)))
@@ -493,8 +474,7 @@ class Create_Model:
         inp.close()
 
     def operator(self):
-        self.create_part()
-        
+        self.create_part()      
         for i in range(len(self.parameter["Name"])):
             name = self.parameter["Name"][i]
             height = sum(self.parameter["Thicknesses"][:i + 1])
@@ -505,8 +485,7 @@ class Create_Model:
             damping_ratio = self.parameter["Damping Ratio"]
 
             self.partition_part(height)
-            self.create_material(name, {"E": elasticity, "D": density, "Damping": damping_ratio, "Vs": Vs,
-                                        "H": thickness})
+            self.create_material(name, {"E": elasticity, "D": density, "Damping": damping_ratio, "Vs": Vs,"H": thickness})
 
         self.create_section()
         self.create_edge_set()
