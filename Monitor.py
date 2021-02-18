@@ -10,7 +10,7 @@ from numpy.core.records import array
 from pandas import read_excel
 
 class Monitor:
-    def __init__(self,dimension,frequency,model_name,damping,pattern):
+    def __init__(self,dimension,frequency,model_name,damping):
         soil_excel = read_excel("SoilProfile.xlsx",sheet_name="SoilParameters",header=None)
         model_parameters = read_excel("SoilProfile.xlsx",sheet_name="ModelParameters",header=None).iloc[:,1].values
         sheet_pile_parameters = read_excel("SoilProfile.xlsx",sheet_name="SheetPileParameters",header=None).iloc[:,1].values
@@ -35,8 +35,8 @@ class Monitor:
         self.DH = model_parameters[6]
         self.D2S = model_parameters[7]
         self.D2D = model_parameters[8]
-        #self.accelometer_pattern = str(model_parameters[9])
-        self.accelometer_pattern = str(pattern)
+        self.accelometer_pattern = str(model_parameters[9])
+        #self.accelometer_pattern = str(pattern)
         self.source_size = model_parameters[10]
         self.PGA = model_parameters[11]
         #self.frequency = model_parameters[12]
@@ -243,16 +243,13 @@ class Monitor:
         reading.join()
         job.join()
 
-frequencies = arange(10,160,10)
-dampings = [0.03,0.05,0.07]
-pattern = list(arange(1,21.5,0.5))
-frequencies = [30]
+frequencies = arange(10,130,10)
 dampings = [0.05]
 for f in frequencies:
     for d in dampings:
-        model_name = "Milas_A_{}Hz_Serim2_2D".format(f,int(100*d))
-        model = Monitor("2D",f,model_name,d,pattern)
+        model_name = "Milas_A_L50_{}Hz".format(f,int(100*d))
+        model = Monitor("2D",f,model_name,d)
         model.path_creater()
         model.modify_model()
-        #model.operator()
-        #model.output()
+        model.operator()
+        model.output()     

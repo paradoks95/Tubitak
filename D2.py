@@ -48,6 +48,7 @@ class Create_Model:
         self.SP_height = temp_SP_height
         self.SP_interaction = temp_SP_interaction
 
+
         self.Thicknesses = self.parameter["Thicknesses"]
         self.layer_heights = append([self.Height], self.Height - cumsum(self.parameter["Thicknesses"]))
         self.sorted_heights = array(sorted(self.layer_heights)[1:])
@@ -404,13 +405,13 @@ class Create_Model:
     def create_boundary_conditions(self):
         Sets = self.soilModel.rootAssembly.instances["Soil Part-1"].sets
         self.soilModel.XsymmBC(createStepName='Initial', name='BC-X-Left', region=Sets['Left_Vertical_Edges'])
-        self.soilModel.DisplacementBC(amplitude="Vibration", createStepName='Vibration Step', name='Vibration',region=Sets['Source'], u2=-0.001)
+        #self.soilModel.DisplacementBC(amplitude="Vibration", createStepName='Vibration Step', name='Vibration',region=Sets['Source'], u2=-0.001)
 
         #source_edge = self.soilPart.edges.findAt((self.source_size / 2, self.Height, 0)).index
         #self.soilPart.Surface(name="Source_Top", side1Edges=self.f(self.soilPart.edges, [source_edge, ]))
         #self.soilModel.Pressure(amplitude='Vibration', createStepName='Vibration Step', magnitude=1,name='Vibration',
         #                        region=self.soilModel.rootAssembly.instances['Soil Part-1'].surfaces['Source_Top'])
-        #self.soilModel.AccelerationBC(a2=-0.01, amplitude='Vibration',createStepName='Vibration Step', fieldName='',name='BC-2',region=Sets["Source"])
+        self.soilModel.AccelerationBC(a2=-1, amplitude='Vibration',createStepName='Vibration Step', fieldName='',name='BC-2',region=Sets["Source"])
 
     def set_mesh_control(self):
         face1 = self.soilPart.faces.findAt((self.Width - 1, 0.01,0))
@@ -424,6 +425,15 @@ class Create_Model:
             face = self.soilPart.faces.findAt((self.Width - 0.01,y-0.01,0))
             edge = self.soilPart.edges.findAt((self.Width-0.01,y,0))
             self.soilPart.setSweepPath(edge=edge, region=face, sense=FORWARD)
+        
+        try:
+            if self.Height - self.ditch_depth not in self.layer_heights:
+                y = self.Height - self.ditch_depth
+                face = self.soilPart.faces.findAt((self.Width - 0.01, y-0.01, 0))
+                edge = self.soilPart.edges.findAt((self.Width-0.01, y, 0))
+                self.soilPart.setSweepPath(edge=edge, region=face, sense=FORWARD)
+        except:
+            pass
 
     def create_mesh(self):
         self.set_mesh_control()
