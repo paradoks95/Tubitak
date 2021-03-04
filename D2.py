@@ -266,6 +266,8 @@ class Create_Model:
         H = properties.get("H", 0.005)
         Vs = properties.get("Vs", 0)
         alpha, beta = self.rayleigh_damping([1, 4], Vs, H, damping)
+        #alpha, beta = float(temp_alpha),float(temp_beta)
+
         self.soilMaterial = self.soilModel.Material(name)
         self.soilMaterial.Density(table=((density,),))
         self.soilMaterial.Elastic(table=(elastic,))
@@ -387,6 +389,8 @@ class Create_Model:
         except:
             alpha, beta = 0, 0
 
+        alpha = float(temp_alpha)
+        beta = float(temp_beta)
         return alpha, beta
 
     def create_vibration(self):

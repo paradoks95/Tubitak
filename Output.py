@@ -8,10 +8,12 @@ from time import sleep
 
 
 class Output:
-    def __init__(self,model_name,target_path):
+    def __init__(self,model_name,target_path,output_type):
         self.model_name = model_name
         self.job_name = model_name
         self.target_path = target_path
+        self.output_type=output_type
+        
     def check_file(self):
         file_name = self.job_name+".lck"
         while isfile(file_name)==True:
@@ -40,7 +42,7 @@ class Output:
         accelometers = step.historyRegions.keys()
         accelometers.sort()
         for acc in accelometers:
-            data = step.historyRegions[acc].historyOutputs["A2"].data
+            data = step.historyRegions[acc].historyOutputs[self.output_type].data
             time,accelerations = self.row2col(data)
             self.output["Time"]=time
             self.output[acc]=accelerations
@@ -70,5 +72,6 @@ class Output:
 
 model_name = "temp_model_name"
 target_path = "temp_target_path"
-output = Output(model_name,target_path)
+output_type = "temp_output"
+output = Output(model_name,target_path,output_type)
 output.wright_to_txt()

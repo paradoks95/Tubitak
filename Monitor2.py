@@ -10,7 +10,7 @@ from numpy.core.records import array
 from pandas import read_excel
 
 class Monitor:
-    def __init__(self,dimension,model_name,frequency):
+    def __init__(self,dimension,model_name,width):
         soil_excel = read_excel("SoilProfile.xlsx",sheet_name="SoilParameters",header=None)
         model_parameters = read_excel("SoilProfile.xlsx",sheet_name="ModelParameters",header=None).iloc[:,1].values
         sheet_pile_parameters = read_excel("SoilProfile.xlsx",sheet_name="SheetPileParameters",header=None).iloc[:,1].values
@@ -19,7 +19,6 @@ class Monitor:
         self.Dimension = dimension
 
         self.damping_ratio = str(soil_excel.iloc[0,1])
-        #self.damping_ratio = str(damping)
         self.layer_names = str(soil_excel.loc[2:,0].values).replace(" ",",")
         self.elastic_modulus = str(soil_excel.loc[2:,1].values).replace(" ",",")
         self.poisson_ratio = str(soil_excel.loc[2:,2].values).replace(" ",",")
@@ -28,7 +27,6 @@ class Monitor:
         self.VS = str(soil_excel.loc[2:,5].values).replace(" ",",")
 
         self.W = str(model_parameters[1])
-        #self.W = str(width)
         self.L = str(model_parameters[2])
         self.ditch_number = model_parameters[3]
         self.DL = model_parameters[4]
@@ -40,8 +38,8 @@ class Monitor:
         #self.accelometer_pattern = str(pattern)
         self.source_size = model_parameters[10]
         self.PGA = model_parameters[11]
-        #self.frequency = model_parameters[12]
-        self.frequency = frequency
+        self.frequency = model_parameters[12]
+        #self.frequency = frequency
         self.time_step = model_parameters[13]
         self.duration = model_parameters[14]
         self.mesh_size = model_parameters[17]
@@ -83,7 +81,7 @@ class Monitor:
     def modify_model(self):
         alpha,Beta = self.dampingCoefficients()
         if self.Dimension == "3D":
-            file_name = "D3.py"
+            file_name = "D3Inf.py"
             old_path = os.path.join(self.initial_path,file_name)
             new_path = os.path.join(self.target_path,file_name)
             file_old = open(old_path)
@@ -111,16 +109,9 @@ class Monitor:
             data = data.replace("temp_ditch_length", str(self.DL))
 
 
-            data = data.replace("temp_fill_ditch",str(self.fillDitch))
+            data = data.replace("temp_fill_ditch",str(self.ditch_number))
             data = data.replace("temp_RC_E",str(self.RC_E))
             data = data.replace("temp_RC_density",str(self.RC_density))
-
-            data = data.replace("temp_SP_pattern",str(self.SP_pattern))
-            data = data.replace("temp_SP_E",str(self.SP_E))
-            data = data.replace("temp_SP_thickness",str(self.SP_Thickness))
-            data = data.replace("temp_SP_height",str(self.SP_Height))
-            data = data.replace("temp_SP_interaction",str(self.SP_Interaction))
-            data = data.replace("temp_SP_density",str(self.SP_Density))
 
             data = data.replace("temp_source_size",str(self.source_size))
             data = data.replace("temp_accelerometer_pattern",str(self.accelometer_pattern))
@@ -132,7 +123,7 @@ class Monitor:
             file_old.close()
         else:
             old_path = os.path.join(self.initial_path, "D2.py")
-            new_path = os.path.join(self.target_path, "D2.py")
+            new_path = os.path.join(self.target_path, "D2_Infinite.py")
             file_old = open(old_path)
             data = file_old.read().replace("temp_model_name", str(self.model_name))
             data = data.replace("temp_layer_names", str(self.layer_names))
@@ -259,9 +250,9 @@ class Monitor:
         print("Başlangıç Saati : ",start_time)
         os.chdir(self.target_path)
         if self.Dimension == "3D":
-            os.system("abaqus cae noGui={}".format(os.path.join(self.target_path,"D3.py")))
+            os.system("abaqus cae noGui={}".format(os.path.join(self.target_path,"D3Inf.py")))
         else:
-            os.system("abaqus cae noGui={}".format(os.path.join(self.target_path, "D2.py")))
+            os.system("abaqus cae noGui={}".format(os.path.join(self.target_path, "D2_Infinite.py")))
 
         print("Inp Oluşturulma Saati : ", str(datetime.now().strftime("%H:%M:%S")))
         self.start_job(self.model_name)
@@ -272,18 +263,13 @@ class Monitor:
         reading.join()
         job.join()
 
-frequencies = [40,80,100]
-for f in frequencies:
-    model_name = "Milas_A_L50_{}Hz".format(f)
-    model = Monitor("2D",model_name,f)
-    #model.path_creater()
-    #model.modify_model()
-    model.operator()
-    model.output()
 
-"""model = Monitor("2D","D2OT")
+
+model = Monitor("3D","D3Inf30_OT",30)
 #model.path_creater()
 #model.modify_model()
-
 model.operator()
-model.output()"""
+model.output()
+
+
+
