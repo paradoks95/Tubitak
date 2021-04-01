@@ -8,7 +8,8 @@ import part
 import section
 import mesh
 from odbAccess import *
-from numpy import float,cumsum,array,abs,where,sin,arange,pi,zeros,unique,append
+from numpy import float,cumsum,array,arange,pi
+import numpy as np
 
 class Create_Model:
     def __init__(self):
@@ -40,6 +41,8 @@ class Create_Model:
         self.fillDitch = int(temp_fill_ditch)
         self.RC_E = temp_RC_E
         self.RC_density = temp_RC_density
+        self.RC_damping = temp_RC_damping
+        self.RC_VS = temp_RC_VS
 
         self.SP_pattern = array(temp_SP_pattern)+self.source_size
         self.SP_E = temp_SP_E
@@ -50,7 +53,7 @@ class Create_Model:
 
 
         self.Thicknesses = self.parameter["Thicknesses"]
-        self.layer_heights = append([self.Height], self.Height - cumsum(self.parameter["Thicknesses"]))
+        self.layer_heights = np.append([self.Height], self.Height - cumsum(self.parameter["Thicknesses"]))
         self.sorted_heights = array(sorted(self.layer_heights)[1:])
 
         self.model_size = sum(self.accelometer_pattern) + self.source_size
@@ -139,13 +142,16 @@ class Create_Model:
                                                             sketch=self.soilModel.sketches['__profile__'])
                     self.soilModel.sketches['__profile__'].rectangle(point1=(self.SP_pattern[i], y),
                                                                     point2=(self.SP_pattern[i]+self.SP_thickness, 0))
-                    self.soilPart.PartitionFaceBySketch(faces=face,sketch=self.soilModel.sketches['__profile__'])
+                    try:
+                        self.soilPart.PartitionFaceBySketch(faces=face,sketch=self.soilModel.sketches['__profile__'])
+                    except:
+                        pass
                     del self.soilModel.sketches['__profile__']
     
             #Section Assignment
             for y in self.layer_heights:
                 for i in range(len(self.SP_pattern)):               
-                    if y >= self.Height - self.SP_height:
+                    if y > self.Height - self.SP_height:
                         face = self.soilPart.faces.findAt((self.SP_pattern[i]+self.SP_thickness/2,y-0.01,0))
                         self.soilPart.SectionAssignment(region=(face,),sectionName="Sheet Pile Section")
             face = self.soilPart.faces.findAt((self.SP_pattern[i]+self.SP_thickness/2,self.Height - self.SP_height + 0.01,0))
@@ -153,10 +159,11 @@ class Create_Model:
 
     def create_rubber_barrier(self):
         if self.fillDitch and self.ditchnumber:
-            
+            alpha,beta = self.rayleigh_damping([1,4],self.RC_VS,self.ditch_depth,self.RC_damping)
             self.soilMaterial = self.soilModel.Material("Rubber")
             self.soilMaterial.Density(table=((self.RC_density,),))
-            self.soilMaterial.Elastic(table=((self.RC_E,0.33),))
+            self.soilMaterial.Elastic(table=((self.RC_E,0.25),))
+            self.soilMaterial.Damping(alpha=alpha, beta=beta)
             self.soilModel.HomogeneousSolidSection(name="Rubber Chip Section", material="Rubber")
 
             try:
@@ -389,13 +396,13 @@ class Create_Model:
         except:
             alpha, beta = 0, 0
 
-        alpha = float(temp_alpha)
-        beta = float(temp_beta)
+        #alpha = float(temp_alpha)
+        #beta = float(temp_beta)
         return alpha, beta
 
     def create_vibration(self):
         time = arange(0, self.duration + self.time_step, self.time_step)
-        accelerations = self.PGA * sin(2 * pi * self.frequency * time)
+        accelerations = self.PGA * np.sin(2 * pi * self.frequency * time)
         self.data = [[time[i], accelerations[i]] for i in range(len(time))]
 
     def create_step(self):
@@ -466,7 +473,7 @@ class Create_Model:
     def create_history_output(self):
         self.soilModel.fieldOutputRequests["F-Output-1"].deactivate("Vibration Step")
         self.soilModel.HistoryOutputRequest(createStepName="Vibration Step", frequency=1, name="H-Output-2",
-                                            variables=('A2',),
+                                            variables=('A2','V2'),
                                             region=self.soilModel.rootAssembly.allInstances['Soil Part-1'].sets[
                                                 'Accelometers'])
 
@@ -475,8 +482,7 @@ class Create_Model:
 
     def create_job(self):
         self.job_name = self.model_name
-        mdb.Job(model=self.model_name, name=self.job_name, type=ANALYSIS, memory=90, memoryUnits=PERCENTAGE,
-                numCpus=6, numDomains=6, numGPUs=1)
+        mdb.Job(model=self.model_name, name=self.job_name, type=ANALYSIS, memory=90, memoryUnits=PERCENTAGE)
         mdb.jobs[self.model_name].writeInput(consistencyChecking=OFF)
 
     def change_element_type(self):

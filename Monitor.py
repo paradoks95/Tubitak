@@ -5,12 +5,15 @@ from threading import Thread
 from datetime import datetime
 from shutil import move
 import sys
-from numpy import float,arange
-from numpy.core.records import array
+from numpy import float,arange,array
 from pandas import read_excel
 
+#TODO : Hata olan durumlarda sonraki analize geçme özelliği ekle
+#TODO : 3D düşey mesh boyutunu düzenle
+#TODO : Hız outputunu da al
+
 class Monitor:
-    def __init__(self,dimension,model_name,frequency):
+    def __init__(self,dimension,model_name,frequency,ditch_number,d2s,SP_pattern,RC,acc_pattern):
         soil_excel = read_excel("SoilProfile.xlsx",sheet_name="SoilParameters",header=None)
         model_parameters = read_excel("SoilProfile.xlsx",sheet_name="ModelParameters",header=None).iloc[:,1].values
         sheet_pile_parameters = read_excel("SoilProfile.xlsx",sheet_name="SheetPileParameters",header=None).iloc[:,1].values
@@ -19,7 +22,6 @@ class Monitor:
         self.Dimension = dimension
 
         self.damping_ratio = str(soil_excel.iloc[0,1])
-        #self.damping_ratio = str(damping)
         self.layer_names = str(soil_excel.loc[2:,0].values).replace(" ",",")
         self.elastic_modulus = str(soil_excel.loc[2:,1].values).replace(" ",",")
         self.poisson_ratio = str(soil_excel.loc[2:,2].values).replace(" ",",")
@@ -28,16 +30,17 @@ class Monitor:
         self.VS = str(soil_excel.loc[2:,5].values).replace(" ",",")
 
         self.W = str(model_parameters[1])
-        #self.W = str(width)
         self.L = str(model_parameters[2])
-        self.ditch_number = model_parameters[3]
+        #self.ditch_number = model_parameters[3]
+        self.ditch_number = ditch_number
         self.DL = model_parameters[4]
         self.DW = model_parameters[5]
         self.DH = model_parameters[6]
-        self.D2S = model_parameters[7]
+        #self.D2S = model_parameters[7]
+        self.D2S = d2s
         self.D2D = model_parameters[8]
-        self.accelometer_pattern = str(model_parameters[9])
-        #self.accelometer_pattern = str(pattern)
+        #self.accelometer_pattern = str(model_parameters[9])
+        self.accelometer_pattern = str(acc_pattern)
         self.source_size = model_parameters[10]
         self.PGA = model_parameters[11]
         #self.frequency = model_parameters[12]
@@ -48,16 +51,20 @@ class Monitor:
         #self.model_name = model_parameters[0]
         self.model_name = model_name
 
-        self.SP_pattern = str(sheet_pile_parameters[0])
+        #self.SP_pattern = str(sheet_pile_parameters[0])
+        self.SP_pattern = str(SP_pattern)
         self.SP_E = str(sheet_pile_parameters[1])
         self.SP_Thickness = str(sheet_pile_parameters[2])
         self.SP_Height = str(sheet_pile_parameters[3])
         self.SP_Interaction = str(sheet_pile_parameters[4])
         self.SP_Density = str(sheet_pile_parameters[5])
 
-        self.fillDitch = str(rubber_chips_parameters[0])
+        #self.fillDitch = str(rubber_chips_parameters[0])
+        self.fillDitch = str(RC)
         self.RC_E = str(rubber_chips_parameters[1])
         self.RC_density = str(rubber_chips_parameters[2])
+        self.RC_damping = str(rubber_chips_parameters[3])
+        self.RC_VS = str(rubber_chips_parameters[4])
         
         self.file_name = self.model_name + ".sta"
 
@@ -114,6 +121,8 @@ class Monitor:
             data = data.replace("temp_fill_ditch",str(self.fillDitch))
             data = data.replace("temp_RC_E",str(self.RC_E))
             data = data.replace("temp_RC_density",str(self.RC_density))
+            data = data.replace("temp_RC_damping",str(self.RC_damping))
+            data = data.replace("temp_RC_VS",str(self.RC_VS))
 
             data = data.replace("temp_SP_pattern",str(self.SP_pattern))
             data = data.replace("temp_SP_E",str(self.SP_E))
@@ -165,6 +174,8 @@ class Monitor:
             data = data.replace("temp_fill_ditch",str(self.fillDitch))
             data = data.replace("temp_RC_E",str(self.RC_E))
             data = data.replace("temp_RC_density",str(self.RC_density))
+            data = data.replace("temp_RC_damping",str(self.RC_damping))
+            data = data.replace("temp_RC_VS",str(self.RC_VS))
 
             data = data.replace("temp_mesh_size",str(self.mesh_size))
 
@@ -225,7 +236,7 @@ class Monitor:
 
     def start_job(self,model_name):
         os.chdir(self.target_path)
-        os.system("abaqus job={m} input={m} ask_delete=OFF cpus=12 gpus=1".format(m=model_name))
+        os.system("abaqus job={m} input={m} ask_delete=OFF".format(m=model_name))
 
     def folder(self):
         for i in os.listdir():
@@ -272,18 +283,38 @@ class Monitor:
         reading.join()
         job.join()
 
-frequencies = [40,80,100]
-for f in frequencies:
-    model_name = "Milas_A_L50_{}Hz".format(f)
-    model = Monitor("2D",model_name,f)
-    #model.path_creater()
-    #model.modify_model()
-    model.operator()
-    model.output()
+location = "Mentese"
+pc_number = int(input("PC_Number:"))
 
-"""model = Monitor("2D","D2OT")
-#model.path_creater()
-#model.modify_model()
+layout = ["L50","L25"][int(pc_number%2)]
+frequency = [10*i for i in range(1,16)][int(pc_number/2)]
+patterns = {
+    "L50":[1,2.5,6,8.5,11,13.5,16,18.5,21,25,29],
+    "L25":[1,2,3.5,6,8.5,11,13.5,16,18.5]
+}
 
-model.operator()
-model.output()"""
+D2S = {
+    "L50":7.25,
+    "L25":4.75
+}
+
+exps = {
+    "A" : [0,0,[]],
+    #"OT" : [1,0,[]],
+    #"RC" : [1,1,[]],
+    #"SP" : [0,0,[D2S[layout]+0.75]],
+    #"SP-OT" : [1,0,[D2S[layout]+0.75]],
+    #"SP-RC" : [1,1,[D2S[layout]+0.75]],
+    #"DT" : [2,0,[]],
+}
+
+for key in exps.keys():
+    model_name = f"{location}_{key}_{layout}_{frequency}Hz"
+    print(model_name)
+    DN,RC,SP = exps[key]
+    model = Monitor("2D",model_name,frequency,DN,D2S[layout],SP,RC,patterns[layout])
+    model.path_creater()
+    model.modify_model()
+    #model.operator()
+    #model.output()
+

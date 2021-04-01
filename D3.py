@@ -8,8 +8,8 @@ import part
 import section
 import mesh
 from odbAccess import *
-from numpy import float, cumsum, array, sin, arange, pi, flipud, append
-
+from numpy import float, cumsum, array, arange, pi, flipud
+import numpy as np
 
 class Create_Model:
     def __init__(self):
@@ -28,7 +28,7 @@ class Create_Model:
         self.Length = self.Width
         self.source_size = float(temp_source_size)
 
-        self.layer_heights = append([self.Depth], self.Depth - cumsum(self.parameter["Thicknesses"]))
+        self.layer_heights = np.append([self.Depth], self.Depth - cumsum(self.parameter["Thicknesses"]))
         self.sorted_heights = array(sorted(self.layer_heights)[1:])
         self.accelometer_pattern = temp_accelerometer_pattern
 
@@ -47,6 +47,9 @@ class Create_Model:
         self.fill_ditch = int(temp_fill_ditch)
         self.RC_E = temp_RC_E
         self.RC_density = temp_RC_density
+        self.RC_damping = temp_RC_damping
+        self.RC_VS = temp_RC_VS
+
 
         self.free_space_X = float((self.Width - self.source_size))*0.5
         self.free_space_Y = float(self.inf_size_y + 1)
@@ -390,10 +393,9 @@ class Create_Model:
         #Create Material
         name = "Rubber"
         density = self.RC_density
-        elasticity = (self.RC_E, 0.3)
-        damping_ratio = 0
+        elasticity = (self.RC_E, 0.25)
 
-        self.create_material(name, {"E": elasticity, "D": density})
+        self.create_material(name, {"E": elasticity, "D": density,"Damping": self.RC_damping, "Vs": self.RC_VS, "H": self.ditch_height})
 
         #Create Section
         self.soilModel.HomogeneousSolidSection(name="RC_Section", material="Rubber")
@@ -517,7 +519,7 @@ class Create_Model:
 
     def create_vibration(self):
         time = arange(0, self.duration + self.time_step, self.time_step)
-        accelerations = self.PGA * 9.81 * sin(2 * pi * self.frequency * time)
+        accelerations = self.PGA * 9.81 * np.sin(2 * pi * self.frequency * time)
 
         self.data = [[time[i], accelerations[i]] for i in range(len(time))]
 
@@ -538,7 +540,7 @@ class Create_Model:
 
     def create_history_output(self):
         self.soilModel.fieldOutputRequests["F-Output-1"].deactivate("Vibration Step")
-        self.soilModel.HistoryOutputRequest(createStepName="Vibration Step", frequency=1, name="H-Output-2",variables=('A3',),
+        self.soilModel.HistoryOutputRequest(createStepName="Vibration Step", frequency=1, name="H-Output-2",variables=('A3','V3'),
                                             region=self.soilModel.rootAssembly.allInstances['Soil Part-1'].sets['Accelometers'])
 
         del self.soilModel.historyOutputRequests['H-Output-1']
