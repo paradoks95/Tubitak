@@ -7,13 +7,12 @@ from shutil import move
 import sys
 from numpy import float,arange,array
 from pandas import read_excel
+from time import time
 
-#TODO : Hata olan durumlarda sonraki analize geçme özelliği ekle
 #TODO : 3D düşey mesh boyutunu düzenle
-#TODO : Hız outputunu da al
 
 class Monitor:
-    def __init__(self,dimension,model_name,frequency,ditch_number,d2s,SP_pattern,RC,acc_pattern):
+    def __init__(self,dimension,model_name,frequency,ditch_number,d2s,SP_pattern,RC,acc_pattern,report_file):
         soil_excel = read_excel("SoilProfile.xlsx",sheet_name="SoilParameters",header=None)
         model_parameters = read_excel("SoilProfile.xlsx",sheet_name="ModelParameters",header=None).iloc[:,1].values
         sheet_pile_parameters = read_excel("SoilProfile.xlsx",sheet_name="SheetPileParameters",header=None).iloc[:,1].values
@@ -67,6 +66,8 @@ class Monitor:
         self.RC_VS = str(rubber_chips_parameters[4])
         
         self.file_name = self.model_name + ".sta"
+        self.report_file = report_file
+        self.startingTime = time()
 
     def dampingCoefficients(self):
         alphaSheet = read_excel("SoilProfile.xlsx",sheet_name="a")
@@ -196,7 +197,7 @@ class Monitor:
 
         file_old = open(old_path)
         data = file_old.read().replace("temp_model_name",str(self.model_name))
-        data = data.replace("temp_target_path",self.target_path)
+        data = data.replace("temp_dimension",self.Dimension)
         if self.Dimension == "3D":
             data = data.replace("temp_output","A3")
         else:
@@ -228,11 +229,18 @@ class Monitor:
         total = self.duration / self.time_step
         while count<=total:
             f = open(self.file_name)
-            count = len(f.readlines()) - 5
+            lines = f.readlines()
+            count = len(lines) - 5
             if c1 != count:
                 self.progress_bar(count, total)
             c1 = count
             f.close()
+            duration = time() - self.startingTime
+            if lines[-1]==" THE ANALYSIS HAS NOT BEEN COMPLETED\n" or duration>1800:
+                sleep(5)
+                self.is_killed = True
+                self.report_file.write(f"{self.model_name}\n")
+                sys.exit()
 
     def start_job(self,model_name):
         os.chdir(self.target_path)
@@ -256,12 +264,14 @@ class Monitor:
                     pass
 
     def output(self):
-        os.system("abaqus cae noGui={}".format(os.path.join(self.target_path,"Output.py")))
+        if not self.is_killed:
+            os.system("abaqus cae noGui={}".format(os.path.join(self.target_path,"Output.py")))
         self.folder()
         os.chdir(os.path.join(self.target_path,"Output",self.model_name))
         os.chdir(self.initial_path)
 
     def operator(self):
+        self.is_killed = False
         self.path_creater()
         self.modify_model()
         self.modify_output()
@@ -277,20 +287,23 @@ class Monitor:
         print("Inp Oluşturulma Saati : ", str(datetime.now().strftime("%H:%M:%S")))
         self.start_job(self.model_name)
         reading=Thread(target=self.read)
+        reading.daemon=True
         job = Thread(target=self.start_job, args=(self.model_name,))
+        job.daemon = True
+        
         reading.start()
         job.start()
         reading.join()
         job.join()
 
 location = "Mentese"
-pc_number = int(input("PC_Number:"))
+pc_number = int(input("PC_Number:")) - 1
 
 layout = ["L50","L25"][int(pc_number%2)]
 frequency = [10*i for i in range(1,16)][int(pc_number/2)]
 patterns = {
     "L50":[1,2.5,6,8.5,11,13.5,16,18.5,21,25,29],
-    "L25":[1,2,3.5,6,8.5,11,13.5,16,18.5]
+    "L25":[1,2,3.5,6,8.5,11,13.5,16,18.5,21,25,29]
 }
 
 D2S = {
@@ -300,21 +313,20 @@ D2S = {
 
 exps = {
     "A" : [0,0,[]],
-    #"OT" : [1,0,[]],
-    #"RC" : [1,1,[]],
-    #"SP" : [0,0,[D2S[layout]+0.75]],
-    #"SP-OT" : [1,0,[D2S[layout]+0.75]],
-    #"SP-RC" : [1,1,[D2S[layout]+0.75]],
+    "OT" : [1,0,[]],
+    "RC" : [1,1,[]],
+    "SP" : [0,0,[D2S[layout]+0.75]],
+    "SP-OT" : [1,0,[D2S[layout]+0.75]],
+    "SP-RC" : [1,1,[D2S[layout]+0.75]],
     #"DT" : [2,0,[]],
 }
-
+report_file = open(f"report{pc_number+1}.txt","w")
 for key in exps.keys():
     model_name = f"{location}_{key}_{layout}_{frequency}Hz"
     print(model_name)
     DN,RC,SP = exps[key]
-    model = Monitor("2D",model_name,frequency,DN,D2S[layout],SP,RC,patterns[layout])
-    model.path_creater()
-    model.modify_model()
-    #model.operator()
-    #model.output()
+    model = Monitor("2D",model_name,frequency,DN,D2S[layout],SP,RC,patterns[layout],report_file)
+    model.operator()
+    model.output()
 
+report_file.close()

@@ -5,19 +5,21 @@ import regionToolset
 from odbAccess import *
 from os.path import isfile,join
 from time import sleep
-
+import os
 
 class Output:
-    def __init__(self,model_name,target_path,output_type):
+    def __init__(self,model_name,target_path,dimension):
         self.model_name = model_name
         self.job_name = model_name
         self.target_path = target_path
-        self.output_type=output_type
+        self.dimension = dimension
         
     def check_file(self):
         file_name = self.job_name+".lck"
         while isfile(file_name)==True:
             sleep(0.1)
+        file_name = self.job_name+".odb"
+        self.odb=openOdb(path=join(self.target_path,file_name))
 
     def row2col(self,data):
         temp_time = []
@@ -33,26 +35,29 @@ class Output:
             return temp_acc,temp_time
 
     def read_history_odb(self):
+        acc_type = "A2" if self.dimension == "2D" else "A3"
+        vel_type = "V2" if self.dimension == "2D" else "V3"
         sleep(5)
         self.check_file()
-        file_name = self.job_name+".odb"
-        odb=openOdb(path=join(self.target_path,file_name))
-        step = odb.steps["Vibration Step"]
-        self.output = {}
+        step = self.odb.steps["Vibration Step"]
+        accOutput = {}
+        velOutput = {}
         accelometers = step.historyRegions.keys()
         accelometers.sort()
         for acc in accelometers:
-            data = step.historyRegions[acc].historyOutputs[self.output_type].data
-            time,accelerations = self.row2col(data)
-            self.output["Time"]=time
-            self.output[acc]=accelerations
+            accData = step.historyRegions[acc].historyOutputs[acc_type].data
+            velData = step.historyRegions[acc].historyOutputs[vel_type].data
+            time,accelerations = self.row2col(accData)
+            time,velocities = self.row2col(velData)
+            accOutput["Time"]=time
+            accOutput[acc]=accelerations
+            velOutput["Time"]=time
+            velOutput[acc]=velocities
+        return accOutput,velOutput
 
-    def wright_to_txt(self):
-        self.read_history_odb()
-        f = open(self.model_name+".txt","w")
-        #first_row = ["Acc{}(m/s)           ".format(int(i)+1) for i in range(len(self.output.keys())-1)]
-
-        keys = self.output.keys()
+    def wright_to_txt(self,data,outputType):
+        f = open("{}_{}.txt".format(self.model_name,outputType),"w")
+        keys = data.keys()
         del keys[keys.index("Time")]
         keys.sort()
 
@@ -60,18 +65,25 @@ class Output:
         first_row.insert(0, "Time(s)             ")
         f.write("   ".join(first_row) + "\n")
 
-        time = self.output["Time"]
+        time = data["Time"]
         for i in range(len(time)):
             row_data = []
             row_data.append(str(time[i]) + " " * (25 - len(str(time[i]))))
             for key in keys:
-                d = str(self.output[key][i])
+                d = str(data[key][i])
                 row_data.append(d + " "*(25-len(d)))
             f.write("".join(row_data) + "\n")
         f.close()
+    
+    def operator(self):
+        accData,velData = self.read_history_odb()
+        self.wright_to_txt(accData,"Acc")
+        self.wright_to_txt(velData,"Vel")
 
+
+dimension = "temp_dimension"
 model_name = "temp_model_name"
-target_path = "temp_target_path"
+target_path = os.getcwd()
 output_type = "temp_output"
-output = Output(model_name,target_path,output_type)
-output.wright_to_txt()
+output = Output(model_name,target_path,dimension)
+output.operator()
